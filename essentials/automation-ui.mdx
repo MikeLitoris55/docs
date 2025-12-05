@@ -1,0 +1,76 @@
+---
+title: Otomasyona Arayüz ve Hata Yönetimi Eklemek
+description: Basit bir otomasyona kullanıcı arayüzü eklemek ve hataları tekrar kontrol edecek denetimler tasarlamak için kılavuz.
+---
+
+Otomasyon akışınız hatasız çalıştığında sorunsuz ilerliyor; ancak hata denetimi ve tekrar kontrol mekanizması yoksa beklenmedik durumlarda sistem sessizce durabilir. Bu rehber, otomasyonunuza hafif bir arayüz eklemek ve dayanıklı hale getirmek için uygulanabilir adımlar sunar.
+
+## Arayüz tasarımına hızlı başlangıç
+
+- **Durum panosu**: Çalışan işlerin listesini, son durumlarını ve çalıştırma sürelerini gösterin. Bir tablo veya kart seti, hangi adımın ne zaman bittiğini hızlıca anlamanızı sağlar.
+- **Eylem butonları**: "Başlat", "Durdur", "Yeniden Dene" ve "Logları indir" gibi temel butonlar, otomasyonu kod yazmadan yönetmenizi sağlar.
+- **Form doğrulama**: Kullanıcıdan girdi alıyorsanız her alanı zorunluluk, tür ve aralık kontrolüyle doğrulayın. Hatalı veri kaynaklı kesintileri erken yakalarsınız.
+- **Canlı geri bildirim**: İşlem sürecinde adım adım ilerleme veya son çalıştırma sonucunu gösteren bildirimler ekleyin.
+
+> Arayüzü hızlıca görmek için basit bir tek sayfa (SPA) kurabilir veya mevcut sunucunuza statik bir HTML/CSS/JS bloğu ekleyebilirsiniz. Önemli olan, otomasyonun çalışma ve hata durumunu açıkça yansıtmasıdır.
+
+## Hata denetimi ve tekrar kontrol akışı
+
+Aşağıdaki örnek akış, otomasyon görevini çalıştırırken hataları yakalayıp yeniden deneme veya iyileştirme adımlarını nasıl ekleyebileceğinizi gösterir:
+
+```ts
+// Basitleştirilmiş denetim döngüsü
+async function runWithChecks(task: () => Promise<void>) {
+  const maxRetries = 3;
+  let attempt = 0;
+
+  while (attempt < maxRetries) {
+    attempt += 1;
+    try {
+      await task();
+      return { status: "success", attempt };
+    } catch (error) {
+      console.error(`[denetim] deneme ${attempt} başarısız`, error);
+      if (attempt === maxRetries) {
+        return { status: "failed", attempt };
+      }
+      await wait(1000 * attempt); // artan bekleme
+    }
+  }
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+```
+
+### Yapılandırılabilir kontroller
+
+- **Girdileri doğrula**: Görev başlamadan önce gerekli dizinlerin, API anahtarlarının ve dosya izinlerinin hazır olduğunu kontrol eden bir `validateConfig()` ekleyin.
+- **Ön koşul sağlık kontrolü**: Bağlanılan servislerin (veritabanı, üçüncü taraf API) yanıt verip vermediğini kısa ping istekleriyle sınayın.
+- **Yinelenen denetim**: Otomasyon periyodikse, her döngü başında bir "sağlık kontrolü" çalıştırarak hataların birikmesini engelleyin.
+
+### Hata görünürlüğü
+
+- **Logları yüzeye çıkarın**: Hata loglarını UI'da özet (zaman damgası, adım, hata mesajı) olarak gösterin; detayını indirme veya kopyalama imkânı verin.
+- **Alarm eşiği**: Belirli sayıda ardışık hata veya belirli süre aşımı durumunda e-posta/slack uyarısı tetikleyin.
+- **Durum göstergesi**: Panoya "çalışıyor", "bekliyor", "yeniden deneniyor" gibi durum rozetleri ekleyin.
+
+## Örnek UI bileşenleri
+
+Aşağıdaki bileşen fikirlerini tercih ettiğiniz UI çatısına uyarlayabilirsiniz:
+
+- **`StatusBadge`**: Renk ve metinle son çalıştırma durumunu belirtir.
+- **`RunHistoryTable`**: Tarih, süre, sonuç ve log bağlantısı sütunlarıyla çalıştırma geçmişini listeler.
+- **`RetryButton`**: Son başarısız çalıştırmayı aynı girdiyle tekrar başlatır; arka planda `runWithChecks` fonksiyonunu kullanır.
+- **`HealthCheckBanner`**: Son sağlık kontrolünün zamanını ve sonucunu gösterir; başarısızsa kullanıcıyı yapılandırma sayfasına yönlendirir.
+
+## Uygulama adımları (özet)
+
+1. **Denetim katmanını ekleyin**: Çekirdek görevi `runWithChecks` benzeri bir sarmalayıcıyla çalıştırın.
+2. **Sağlık kontrollerini tanımlayın**: Yapılandırma ve dış servis kontrollerini ayrı fonksiyonlarda toplayın, sonuçlarını UI'ya yansıtın.
+3. **Arayüzü bağlayın**: Durumları API veya dosya çıktısı üzerinden UI bileşenlerine aktarın; manuel tetikleme butonları ekleyin.
+4. **Alarm kanallarını açın**: Kritik hatalar için e-posta veya webhook bildirimlerini yapılandırın.
+5. **Periyodik gözden geçirme**: Loglardan alınan kalıcı hataları analiz ederek denetim eşiklerini ve bekleme sürelerini güncelleyin.
+
+Bu yaklaşım, otomasyonunuzu hem kullanıcı dostu bir arayüzle görünür kılar hem de hataları sessizce geçiştirmek yerine yakalayıp iyileştirir.
